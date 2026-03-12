@@ -267,6 +267,28 @@ function Set-FSLogixVHDLocations {
 }
 
 # ============================================================
+#  STAP 6 - OPRUIMEN: C:\mmr verwijderen
+# ============================================================
+function Remove-MMRFolder {
+    Write-Log "--- Stap 6: C:\mmr folder verwijderen ---"
+    $mmrPath = 'C:\mmr'
+
+    if (Test-Path $mmrPath) {
+        try {
+            Remove-Item -Path $mmrPath -Recurse -Force
+            Write-Log "Folder $mmrPath verwijderd" -Level SUCCESS
+        }
+        catch {
+            Write-Log "Fout bij verwijderen $mmrPath : $_" -Level ERROR
+            throw
+        }
+    }
+    else {
+        Write-Log "Folder $mmrPath bestaat niet, niets te verwijderen" -Level INFO
+    }
+}
+
+# ============================================================
 #  HOOFDPROCES
 # ============================================================
 try {
@@ -276,6 +298,7 @@ try {
     Set-SystemAccountLocale
     Remove-CloudKerberosKey
     Set-FSLogixVHDLocations
+    Remove-MMRFolder
 
     Write-Log "========================================"
     Write-Log "$ScriptName v$ScriptVersion voltooid zonder fatale fouten" -Level SUCCESS
