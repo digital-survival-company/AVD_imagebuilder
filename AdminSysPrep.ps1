@@ -70,3 +70,8 @@ while ($true) {
     Start-Sleep -s 5
 }
 Write-Output '>>> Sysprep complete ...'
+
+# --- Zelfdestructie: verwijder dit script van de image ---
+Write-Output '>>> Cleanup: removing DeprovisioningScript.ps1 from image ...'
+Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
+Write-Output '>>> Cleanup complete.'
