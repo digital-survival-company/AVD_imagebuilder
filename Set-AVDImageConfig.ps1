@@ -289,66 +289,6 @@ function Remove-MMRFolder {
 }
 
 # ============================================================
-#  STAP 7 - DUMMY TELEMETRY SERVICE (sysprep fix Win11 24H2)
-# ============================================================
-function Register-DummyTelemetryService {
-    Write-Log "--- Stap 7: Dummy WindowsAzureTelemetryService registreren (sysprep fix) ---"
-    $serviceName = 'WindowsAzureTelemetryService'
-
-    $existing = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
-    if ($existing) {
-        Write-Log "Service $serviceName bestaat al (status: $($existing.Status)), geen actie nodig" -Level INFO
-        return
-    }
-
-    try {
-        # Maak een dummy service aan die direct stopt (nssm-achtig, maar met sc.exe)
-        # Gebruikt svchost als placeholder binary — de service wordt op Manual gezet en gestart
-        $null = sc.exe create $serviceName binPath= "$env:SystemRoot\System32\svchost.exe -k inteltag" start= demand type= own 2>&1
-        Write-Log "Dummy service $serviceName aangemaakt"
-
-        # Start en stop direct zodat de service status 'Running' of 'Stopped' is (niet 'non-existent')
-        # Het AdminSysPrep script checkt alleen of de service BESTAAT en running is
-        # We zetten hem op Stopped — het Microsoft script wacht tot hij Running is OF accepteert dat hij bestaat
-        # Correctie: het script loopt in een while-loop tot Running, dus we moeten hem Running krijgen
-        # We gebruiken een echte lege service via noop
-        $null = sc.exe delete $serviceName 2>&1
-
-        # Alternatief: maak een service aan op basis van een bestaande werkende svchost group
-        New-Service -Name $serviceName `
-                    -BinaryPathName "$env:SystemRoot\System32\svchost.exe -k inteltag" `
-                    -DisplayName 'Windows Azure Telemetry Service (dummy)' `
-                    -StartupType Manual `
-                    -Description 'Dummy service for AIB sysprep compatibility on Win11 24H2' `
-                    -ErrorAction Stop | Out-Null
-        Write-Log "Dummy service $serviceName geregistreerd via New-Service" -Level SUCCESS
-
-        # Het Microsoft AdminSysPrep.ps1 script heeft deze check:
-        #   while ((Get-Service WindowsAzureTelemetryService) -and
-        #          ((Get-Service WindowsAzureTelemetryService).Status -ne 'Running')) { Start-Sleep -s 5 }
-        #
-        # De -and clausule zorgt ervoor dat als de service WEL bestaat maar NIET draait,
-        # hij in een oneindige loop hangt. Maar als Get-Service een error geeft (service niet gevonden),
-        # valt de while uit vanwege de error.
-        #
-        # Oplossing: service verwijderen is niet wat we willen. We houden hem als Stopped.
-        # Het originele script vangt dit NIET goed af — de error op Get-Service breekt de while.
-        # Dus eigenlijk werkt het JUIST als de service NIET bestaat, mits ErrorAction niet op Stop staat.
-        #
-        # Het probleem is dat de ERROR OUTPUT naar stderr gaat en Packer dat als fout ziet.
-        # De fix is dus: service MOET bestaan, en dan Running zijn, OF we passen de aanpak aan.
-
-        Write-Log "Let op: de dummy service kan niet echt starten (geen echte binary)" -Level WARN
-        Write-Log "Het AdminSysPrep script zal de service vinden en doorgaan" -Level INFO
-    }
-    catch {
-        Write-Log "Fout bij aanmaken dummy service: $_" -Level ERROR
-        Write-Log "Sysprep AdminSysPrep.ps1 kan mogelijk falen op TelemetryService check" -Level WARN
-        # Niet fataal — we gooien geen throw
-    }
-}
-
-# ============================================================
 #  HOOFDPROCES
 # ============================================================
 try {
@@ -359,7 +299,6 @@ try {
     Remove-CloudKerberosKey
     Set-FSLogixVHDLocations
     Remove-MMRFolder
-    Register-DummyTelemetryService
 
     Write-Log "========================================"
     Write-Log "$ScriptName v$ScriptVersion voltooid zonder fatale fouten" -Level SUCCESS
